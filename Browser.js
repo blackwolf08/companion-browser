@@ -11,18 +11,20 @@ import {
   SafeAreaView,
   Platform,
   StatusBar,
-  Dimensions
+  Dimensions,
+  ProgressBarAndroid
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import arrowBackIcon from './assets/arrow_back.png';
 import arrowNextIcon from './assets/arrow_next.png';
 import refreshIcon from './assets/refresh_page.png';
 import incognitoIcon from './assets/incognito.png';
+import tor from './assets/tor.png';
 
 let browserRef = null;
 
 // initial url for the browser
-const url = 'https://www.google.com';
+const url = 'http://jiit.ac.in';
 
 // functions to search using different engines
 const searchEngines = {
@@ -55,11 +57,12 @@ class Browser extends Component {
   state = {
     currentURL: url,
     urlText: url,
-    prettifiedUrl: '🔒 google.com',
+    prettifiedUrl: 'JIIT | CN Project',
     title: '',
     canGoForward: false,
     canGoBack: false,
     incognito: false,
+    progress: 0,
     config: {
       detectorTypes: 'all',
       allowStorage: true,
@@ -100,9 +103,8 @@ class Browser extends Component {
   loadURL = () => {
     let { config, urlText, prettifiedUrl } = this.state;
     const { defaultSearchEngine } = config;
-    const newURL = upgradeURL(urlText, defaultSearchEngine);
+    let newURL = upgradeURL(urlText, defaultSearchEngine);
     prettifiedUrl = newURL;
-    console.log(newURL);
     prettifiedUrl = prettifiedUrl.replace('https://www.', '');
     prettifiedUrl = prettifiedUrl.replace('http://www.', '');
     prettifiedUrl = prettifiedUrl.replace('http://', '');
@@ -112,12 +114,22 @@ class Browser extends Component {
     if (newURL.startsWith('https:')) {
       prettifiedUrl = '🔒 ' + prettifiedUrl;
     }
-    if (newURL.startsWith('http:')) {
+    if (newURL.startsWith('http:') && newURL.indexOf('onion') <= 1) {
       prettifiedUrl = 'Not secure - ' + prettifiedUrl;
     }
     if (this.state.incognito) {
       prettifiedUrl = 'Private - ' + prettifiedUrl;
     }
+    if (newURL.indexOf('onion') >= 1) {
+      prettifiedUrl = '🔒 TOR Relay - ' + prettifiedUrl;
+      if (newURL.indexOf('pet') <= 1) {
+        newURL = newURL + '.pet';
+      }
+    }
+    prettifiedUrl = prettifiedUrl.replace('.pet', '');
+    console.log('new url:', newURL);
+    console.log('prettified url:', prettifiedUrl);
+
     this.setState({
       currentURL: newURL,
       urlText: newURL,
@@ -186,7 +198,28 @@ class Browser extends Component {
   // can prevent requests from fulfilling, good to log requests
   // or filter ads and adult content.
   filterRequest = request => {
-    return true;
+    let url = '';
+    if (request.url.indexOf('.onion') >= 1 && request.url.indexOf('pet') <= 1) {
+      let idx = request.url.indexOf('.onion');
+      url =
+        request.url.substring(0, idx) +
+        request.url.substring(idx, request.url.length - 1) +
+        '.pet';
+      this.setState({
+        currentURL: url,
+        prettifiedUrl: url,
+        urlText: url
+      });
+
+      console.log(url);
+      setTimeout(() => {
+        this.loadURL();
+        return true;
+      }, 200);
+    } else {
+      this.loadURL();
+      return true;
+    }
   };
 
   onBrowserMessage = event => {
@@ -202,7 +235,8 @@ class Browser extends Component {
       canGoForward,
       canGoBack,
       incognito,
-      prettifiedUrl
+      prettifiedUrl,
+      progress
     } = state;
     return (
       <SafeAreaView style={styles.root}>
@@ -241,7 +275,21 @@ class Browser extends Component {
             </TouchableOpacity>
           </View>
         </View>
-        <View style={styles.browserContainer}>
+        {Platform.OS == 'android' && progress !== 1 && (
+          <ProgressBarAndroid
+            styleAttr='Horizontal'
+            color='gray'
+            indeterminate={false}
+            progress={progress}
+            style={{
+              height: 5,
+              position: 'absolute',
+              zIndex: 10,
+              width: Dimensions.get('window').width
+            }}
+          />
+        )}
+        <View style={[styles.browserContainer]}>
           <WebView
             ref={this.setBrowserRef}
             originWhitelist={['*']}
@@ -249,6 +297,9 @@ class Browser extends Component {
             onLoad={this.onBrowserLoad}
             onError={this.onBrowserError}
             onNavigationStateChange={this.onNavigationStateChange}
+            onLoadProgress={progress => {
+              this.setState({ progress: progress.nativeEvent.progress });
+            }}
             renderLoading={() => (
               <View
                 style={{
@@ -297,6 +348,19 @@ class Browser extends Component {
                 ]}
                 source={arrowNextIcon}
               />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                this.setState(
+                  {
+                    urlText: 'ldukpntzsjnlmhaf.onion',
+                    prettifiedUrl: 'ldukpntzsjnlmhaf.onion'
+                  },
+                  () => this.loadURL()
+                );
+              }}
+            >
+              <Image style={[styles.refreshIcon]} source={tor} />
             </TouchableOpacity>
 
             <TouchableOpacity onPress={this.toggleIncognito}>
